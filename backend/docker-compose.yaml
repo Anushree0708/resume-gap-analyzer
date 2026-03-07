@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:15.17-trixie
+    container_name: resume-gap-postgres
+    environment:
+      POSTGRES_DB: resume_gap
+      POSTGRES_USER: resume_gap
+      POSTGRES_PASSWORD: resume_gap
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resume_gap -d resume_gap"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres_data:
