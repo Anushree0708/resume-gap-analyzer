@@ -1,10 +1,12 @@
+
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from database import engine, SessionLocal
-from models import ResumeAnalysis
-from model import analyze_resume
-from utils import extract_text_from_pdf
+from backend.database import engine, SessionLocal
+from backend.models import ResumeAnalysis
+from backend.model import analyze_resume
+from backend.utils import extract_text_from_pdf
 from sqlalchemy import func
 import os
 
