@@ -1,7 +1,9 @@
 fastapi
 uvicorn
+sqlalchemy
 pandas
 numpy
 scikit-learn
 pdfplumber
 python-multipart
+databases
