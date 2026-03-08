@@ -1,29 +1,26 @@
-export const API_URL = "https://resume-gap-analyzer-1-li2y.onrender.com";
+const API_BASE_URL = "https://resume-gap-analyzer-1-li2y.onrender.com";
 
-// Analyze Resume
+// ---- ANALYZE RESUME ----
 export async function analyzeResume(file: File, jobDescription: string) {
-
   const formData = new FormData();
   formData.append("file", file);
   formData.append("job_description", jobDescription);
 
-  const response = await fetch(`${API_URL}/analyze`, {
+  const response = await fetch(`${API_BASE_URL}/analyze`, {
     method: "POST",
-    body: formData
+    body: formData,
   });
 
   if (!response.ok) {
-    throw new Error("Resume analysis failed");
+    throw new Error("Failed to analyze resume");
   }
 
   return response.json();
 }
 
-
-// Fetch Resume History
+// ---- FETCH HISTORY ----
 export async function fetchHistory() {
-
-  const response = await fetch(`${API_URL}/history`);
+  const response = await fetch(`${API_BASE_URL}/history`);
 
   if (!response.ok) {
     throw new Error("Failed to fetch history");
@@ -32,11 +29,9 @@ export async function fetchHistory() {
   return response.json();
 }
 
-
-// Fetch Analytics
+// ---- FETCH ANALYTICS ----
 export async function fetchAnalytics() {
-
-  const response = await fetch(`${API_URL}/analytics`);
+  const response = await fetch(`${API_BASE_URL}/analytics`);
 
   if (!response.ok) {
     throw new Error("Failed to fetch analytics");
