@@ -7,3 +7,4 @@ scikit-learn
 pdfplumber
 python-multipart
 databases
+python-dotenv
