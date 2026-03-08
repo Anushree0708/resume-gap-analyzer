@@ -2,7 +2,7 @@
 
 from sqlalchemy import Column, Integer, Float, String, DateTime, Text
 from datetime import datetime
-from database import Base
+from backend.database import Base
 
 class ResumeAnalysis(Base):
     __tablename__ = "resume_analysis"
