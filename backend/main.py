@@ -1,34 +1,50 @@
-
-
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+import os
+
 from backend.database import engine, SessionLocal
 from backend.models import ResumeAnalysis
 from backend.model import analyze_resume
 from backend.utils import extract_text_from_pdf
-from sqlalchemy import func
-import os
+
 
 app = FastAPI()
 
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(","),
+    allow_origins=os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://localhost:3000"
+    ).split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Create tables
 ResumeAnalysis.metadata.create_all(bind=engine)
 
+
+# Root route
+@app.get("/")
+def home():
+    return {"message": "Resume Analyzer API is running"}
+
+
+# Analyze resume
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...), job_description: str = Form(...)):
 
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
-    resume_text = extract_text_from_pdf(file)
+    # Read PDF in memory (Render-safe)
+    pdf_bytes = await file.read()
+
+    resume_text = extract_text_from_pdf(pdf_bytes)
 
     result = analyze_resume(resume_text, job_description)
 
@@ -47,8 +63,12 @@ async def analyze(file: UploadFile = File(...), job_description: str = Form(...)
     db.close()
 
     return result
+
+
+# History endpoint
 @app.get("/history")
 def get_history():
+
     db: Session = SessionLocal()
 
     records = db.query(ResumeAnalysis).all()
@@ -66,8 +86,12 @@ def get_history():
         }
         for record in records
     ]
+
+
+# Analytics endpoint
 @app.get("/analytics")
 def get_analytics():
+
     db: Session = SessionLocal()
 
     total = db.query(func.count(ResumeAnalysis.id)).scalar()
