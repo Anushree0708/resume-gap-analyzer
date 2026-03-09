@@ -1,5 +1,5 @@
 
-const API_BASE_URL = "https://resume-gap-analyzer-2-i2m8.onrender.com";
+const API_BASE_URL = "https://resume-gap-analyzer-1-li2y.onrender.com";
 
 export async function analyzeResume(file: File, jobDescription: string) {
 
