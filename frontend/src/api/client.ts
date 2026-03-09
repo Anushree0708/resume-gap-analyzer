@@ -1,6 +1,5 @@
 const API_BASE_URL = "https://resume-gap-analyzer-1-li2y.onrender.com";
 
-// ---- ANALYZE RESUME ----
 export async function analyzeResume(file: File, jobDescription: string) {
 
   const formData = new FormData();
@@ -13,14 +12,14 @@ export async function analyzeResume(file: File, jobDescription: string) {
   });
 
   if (!response.ok) {
-    throw new Error("Failed to analyze resume");
+    const text = await response.text();
+    throw new Error(text);
   }
 
   return response.json();
 }
 
 
-// ---- FETCH HISTORY ----
 export async function fetchHistory() {
 
   const response = await fetch(`${API_BASE_URL}/history`);
@@ -33,7 +32,6 @@ export async function fetchHistory() {
 }
 
 
-// ---- FETCH ANALYTICS ----
 export async function fetchAnalytics() {
 
   const response = await fetch(`${API_BASE_URL}/analytics`);

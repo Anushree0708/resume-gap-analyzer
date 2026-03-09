@@ -139,7 +139,13 @@ export default function AnalyzePage() {
           <div
             className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-400 transition-colors"
             onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                fileInputRef.current?.click()
+              }
+            }
+          }
             role="button"
             tabIndex={0}
             aria-label="Click to upload PDF resume"

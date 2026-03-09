@@ -1,12 +1,13 @@
-const API_BASE_URL = "https://resume-gap-analyzer-1-li2y.onrender.com";
 
-// ---- ANALYZE RESUME ----
+// api.ts
+export const API_BASE_URL = "https://resume-gap-analyzer-1-li2y.onrender.com"; // your backend URL
+
 export async function analyzeResume(file: File, jobDescription: string) {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("job_description", jobDescription);
 
-  const response = await fetch(`${API_BASE_URL}/analyze`, {
+  const response = await fetch(`${API_BASE_URL}/analyze`, { // <- /analyze endpoint
     method: "POST",
     body: formData,
   });
