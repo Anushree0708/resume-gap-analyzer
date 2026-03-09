@@ -12,6 +12,7 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
         <span className="text-gray-600">{label}</span>
         <span className="font-semibold">{value.toFixed(1)}%</span>
       </div>
+
       <div className="w-full bg-gray-200 rounded-full h-2.5">
         <div
           className="bg-indigo-600 h-2.5 rounded-full transition-all duration-700"
@@ -40,7 +41,10 @@ function SkillBadges({
         <span className="text-gray-400 text-sm">None</span>
       ) : (
         skills.map((s) => (
-          <span key={s} className={`text-xs px-2 py-1 rounded-full font-medium ${cls}`}>
+          <span
+            key={s}
+            className={`text-xs px-2 py-1 rounded-full font-medium ${cls}`}
+          >
             {s}
           </span>
         ))
@@ -111,6 +115,7 @@ export default function AnalyzePage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10 space-y-8">
+
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Analyze Resume</h1>
         <p className="text-gray-500 mt-1">
@@ -120,10 +125,12 @@ export default function AnalyzePage() {
 
       {result && (
         <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 space-y-6">
+
           <div className="text-center">
             <div className="text-6xl font-extrabold text-indigo-600">
               {result.final_match_score.toFixed(1)}%
             </div>
+
             <div className="text-gray-500 mt-1 text-sm font-medium uppercase tracking-wider">
               Overall Match Score
             </div>
@@ -135,6 +142,7 @@ export default function AnalyzePage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
             <div>
               <h3 className="font-semibold text-gray-700">✅ Matching Skills</h3>
               <SkillBadges skills={result.matched_skills} color="green" />
@@ -144,13 +152,26 @@ export default function AnalyzePage() {
               <h3 className="font-semibold text-gray-700">❌ Missing Skills</h3>
               <SkillBadges skills={result.missing_skills} color="red" />
             </div>
+
           </div>
+
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 space-y-6">
+      <form onSubmit={handleSubmit} noValidate className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 space-y-6">
 
-        {/* FILE UPLOAD */}
+        {/* Hidden File Input */}
+        <input
+          ref={fileInputRef}
+          id="resume-file"
+          name="file"
+          type="file"
+          accept=".pdf,application/pdf"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+
+        {/* FILE UPLOAD UI */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Resume (PDF, max {MAX_FILE_SIZE_MB} MB)
@@ -160,20 +181,12 @@ export default function AnalyzePage() {
             className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-400"
             onClick={() => fileInputRef.current?.click()}
           >
-
-            {/* Hidden real input */}
-            <input
-              ref={fileInputRef}
-              id="resume-file"
-              type="file"
-              accept=".pdf,application/pdf"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-
             {file ? (
               <div>
-                <div className="text-indigo-600 font-medium">📎 {file.name}</div>
+                <div className="text-indigo-600 font-medium">
+                  📎 {file.name}
+                </div>
+
                 <div className="text-gray-400 text-xs">
                   {(file.size / 1024 / 1024).toFixed(2)} MB
                 </div>
@@ -181,9 +194,11 @@ export default function AnalyzePage() {
             ) : (
               <div>
                 <div className="text-gray-400 text-2xl">📄</div>
+
                 <div className="text-gray-500 text-sm">
-                  Click to upload or drag & drop
+                  Click to upload
                 </div>
+
                 <div className="text-gray-400 text-xs">
                   PDF only · Max {MAX_FILE_SIZE_MB} MB
                 </div>
@@ -220,7 +235,9 @@ export default function AnalyzePage() {
         >
           {loading ? "Analyzing..." : "Analyze"}
         </button>
+
       </form>
+
     </div>
   );
 }
