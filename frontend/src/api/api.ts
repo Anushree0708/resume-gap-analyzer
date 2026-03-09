@@ -1,6 +1,6 @@
 
 // api.ts
-export const API_BASE_URL = "https://resume-gap-analyzer-1-li2y.onrender.com"; // your backend URL
+const API_URL = "https://resume-gap-analyzer-2-i2m8.onrender.com"// your backend URL
 
 export async function analyzeResume(file: File, jobDescription: string) {
   const formData = new FormData();
