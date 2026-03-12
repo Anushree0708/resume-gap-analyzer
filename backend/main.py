@@ -51,7 +51,8 @@ Base.metadata.create_all(bind=engine)
 # JWT config
 # ---------------------------------------------------------------------------
 
-JWT_SECRET    = os.environ.get("JWT_SECRET", "change-me-before-deploying")
+
+JWT_SECRET = os.environ.get("JWT_SECRET", "supersecretkey-resumegap-2026")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_H  = 24 * 7   # 1 week
 
