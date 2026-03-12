@@ -4,7 +4,7 @@ import Navbar from './components/Navbar';
 import AnalyzePage from './pages/AnalyzePage';
 import HistoryPage from './pages/HistoryPage';
 import AnalyticsPage from './pages/AnalyticsPage';
-import AuthPage from './pages/AuthPage';
+import AuthPage from './pages/AuthPage.tsx'
 import { isLoggedIn, getEmail, clearToken } from './api/client';
 
 export default function App() {
