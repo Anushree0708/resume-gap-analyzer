@@ -24,7 +24,7 @@ function ScorePill({ value }: { value: number }) {
 export default function HistoryPage() {
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
 
   useEffect(() => {
     fetchHistory()
@@ -37,7 +37,7 @@ export default function HistoryPage() {
     <div className="max-w-5xl mx-auto px-4 py-10 space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Analysis History</h1>
-        <p className="text-gray-500 mt-1">All past resume analyses, newest first.</p>
+        <p className="text-gray-500 mt-1">Your past resume analyses, newest first.</p>
       </div>
 
       {loading && (
@@ -70,9 +70,10 @@ export default function HistoryPage() {
               <tr>
                 <th className="px-4 py-3 text-left">#</th>
                 <th className="px-4 py-3 text-left">Filename</th>
-                <th className="px-4 py-3 text-left">Overall Score</th>
-                <th className="px-4 py-3 text-left">Skill Score</th>
-                <th className="px-4 py-3 text-left">Cosine Score</th>
+                <th className="px-4 py-3 text-left">Overall</th>
+                <th className="px-4 py-3 text-left">Skills</th>
+                <th className="px-4 py-3 text-left">Experience</th>  {/* NEW */}
+                <th className="px-4 py-3 text-left">Cosine</th>
                 <th className="px-4 py-3 text-left">Date</th>
               </tr>
             </thead>
@@ -83,6 +84,9 @@ export default function HistoryPage() {
                   <td className="px-4 py-3 font-medium">{r.filename}</td>
                   <td className="px-4 py-3"><ScorePill value={r.final_score} /></td>
                   <td className="px-4 py-3 text-gray-500">{r.skill_score.toFixed(1)}%</td>
+                  <td className="px-4 py-3 text-gray-500">   {/* NEW */}
+                    {r.experience_score != null ? `${r.experience_score.toFixed(1)}%` : '—'}
+                  </td>
                   <td className="px-4 py-3 text-gray-500">{r.cosine_score.toFixed(1)}%</td>
                   <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{formatDate(r.created_at)}</td>
                 </tr>

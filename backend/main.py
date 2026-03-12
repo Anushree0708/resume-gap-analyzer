@@ -1,23 +1,36 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+# main.py
+
+import os
+import re
+import hmac
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
+from functools import wraps
+
+import jwt
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from backend.database import engine, SessionLocal
-from backend.models import ResumeAnalysis
-from backend.model import analyze_resume
+from backend.models import Base, User, ResumeAnalysis
+from backend.scoring import analyze_resume
 from backend.utils import extract_text_from_pdf
 
 
+# ---------------------------------------------------------------------------
+# App & CORS
+# ---------------------------------------------------------------------------
+
 app = FastAPI()
 
-
-# -------------------------------
-# CORS CONFIGURATION
-# -------------------------------
 origins = [
     "http://localhost:5173",
-    "https://resume-gap-analyzer-2-i2m8.onrender.com"
+    "https://resume-gap-analyzer-2-i2m8.onrender.com",
 ]
 
 app.add_middleware(
@@ -28,125 +41,229 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------------------
-# CREATE DATABASE TABLES
-# -------------------------------
-ResumeAnalysis.metadata.create_all(bind=engine)
+# ---------------------------------------------------------------------------
+# Create all tables (User + ResumeAnalysis)
+# ---------------------------------------------------------------------------
+
+Base.metadata.create_all(bind=engine)
+
+# ---------------------------------------------------------------------------
+# JWT config
+# ---------------------------------------------------------------------------
+
+JWT_SECRET    = os.environ.get("JWT_SECRET", "change-me-before-deploying")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_H  = 24 * 7   # 1 week
+
+bearer_scheme = HTTPBearer()
 
 
-# -------------------------------
-# ROOT ENDPOINT
-# -------------------------------
+# ---------------------------------------------------------------------------
+# Password helpers
+# ---------------------------------------------------------------------------
+
+def _hash_password(password: str, salt: str | None = None) -> tuple[str, str]:
+    if salt is None:
+        salt = secrets.token_hex(32)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260_000)
+    return key.hex(), salt
+
+
+def _verify_password(plain: str, stored_hash: str, stored_salt: str) -> bool:
+    candidate, _ = _hash_password(plain, stored_salt)
+    return hmac.compare_digest(candidate, stored_hash)
+
+
+# ---------------------------------------------------------------------------
+# Token helpers
+# ---------------------------------------------------------------------------
+
+def _create_token(user_id: int, email: str) -> str:
+    payload = {
+        "sub":   user_id,
+        "email": email,
+        "exp":   datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRY_H),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def _decode_token(token: str) -> dict:
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired — please log in again")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+# ---------------------------------------------------------------------------
+# Auth dependency — use with Depends(get_current_user)
+# ---------------------------------------------------------------------------
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
+    return _decode_token(credentials.credentials)
+
+
+# ---------------------------------------------------------------------------
+# DB dependency
+# ---------------------------------------------------------------------------
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Pydantic schemas
+# ---------------------------------------------------------------------------
+
+class AuthRequest(BaseModel):
+    email:    str
+    password: str
+
+
+# ---------------------------------------------------------------------------
+# Root
+# ---------------------------------------------------------------------------
+
 @app.get("/")
 def home():
     return {"message": "Resume Analyzer API is running"}
 
 
-# -------------------------------
-# ANALYZE RESUME
-# -------------------------------
+# ---------------------------------------------------------------------------
+# Auth endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/register")
+def register(body: AuthRequest, db: Session = Depends(get_db)):
+    email = body.email.strip().lower()
+
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    pwd_hash, pwd_salt = _hash_password(body.password)
+    user = User(email=email, pwd_hash=pwd_hash, pwd_salt=pwd_salt)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = _create_token(user.id, user.email)
+    return {"token": token, "email": user.email}
+
+
+@app.post("/login")
+def login(body: AuthRequest, db: Session = Depends(get_db)):
+    email = body.email.strip().lower()
+    user  = db.query(User).filter(User.email == email).first()
+
+    if not user or not _verify_password(body.password, user.pwd_hash, user.pwd_salt):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = _create_token(user.id, user.email)
+    return {"token": token, "email": user.email}
+
+
+# ---------------------------------------------------------------------------
+# Analyze  (requires login)
+# ---------------------------------------------------------------------------
+
 @app.post("/analyze")
 async def analyze(
-    file: UploadFile = File(...),
-    job_description: str = Form(...)
+    file:            UploadFile = File(...),
+    job_description: str        = Form(...),
+    db:              Session    = Depends(get_db),
+    current_user:    dict       = Depends(get_current_user),
 ):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File is missing")
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
-    try:
-        # Validate file
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="File is missing")
+    pdf_bytes = await file.read()
+    if len(pdf_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-        if not file.filename.lower().endswith(".pdf"):
-            raise HTTPException(status_code=400, detail="Only PDF files allowed")
+    resume_text = extract_text_from_pdf(pdf_bytes)
+    if not resume_text.strip():
+        raise HTTPException(status_code=400, detail="Could not extract text from PDF")
 
-        # Read file
-        pdf_bytes = await file.read()
+    result = analyze_resume(resume_text, job_description)
 
-        if len(pdf_bytes) == 0:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    entry = ResumeAnalysis(
+        user_id          = current_user["sub"],
+        filename         = file.filename,
+        job_description  = job_description,
+        final_score      = result["final_match_score"],
+        cosine_score     = result["cosine_similarity_score"],
+        skill_score      = result["skill_match_score"],
+        experience_score = result["experience_score"],
+    )
+    db.add(entry)
+    db.commit()
 
-        # Extract text
-        resume_text = extract_text_from_pdf(pdf_bytes)
-
-        if not resume_text.strip():
-            raise HTTPException(status_code=400, detail="Could not extract text from PDF")
-
-        # Analyze
-        result = analyze_resume(resume_text, job_description)
-
-        # Save to database
-        db: Session = SessionLocal()
-
-        analysis_entry = ResumeAnalysis(
-            filename=file.filename,
-            job_description=job_description,
-            final_score=result["final_match_score"],
-            cosine_score=result["cosine_similarity_score"],
-            skill_score=result["skill_match_score"]
-        )
-
-        db.add(analysis_entry)
-        db.commit()
-        db.close()
-
-        return result
-
-    except HTTPException as e:
-        raise e
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return result
 
 
-# -------------------------------
-# HISTORY ENDPOINT
-# -------------------------------
+# ---------------------------------------------------------------------------
+# History  (only the logged-in user's records)
+# ---------------------------------------------------------------------------
+
 @app.get("/history")
-def get_history():
+def get_history(
+    db:           Session = Depends(get_db),
+    current_user: dict    = Depends(get_current_user),
+):
+    records = (
+        db.query(ResumeAnalysis)
+        .filter(ResumeAnalysis.user_id == current_user["sub"])
+        .order_by(ResumeAnalysis.created_at.desc())
+        .all()
+    )
 
-    try:
-        db: Session = SessionLocal()
-        records = db.query(ResumeAnalysis).all()
-        db.close()
-
-        return [
-            {
-                "id": r.id,
-                "filename": r.filename,
-                "final_score": r.final_score,
-                "cosine_score": r.cosine_score,
-                "skill_score": r.skill_score,
-                "created_at": r.created_at
-            }
-            for r in records
-        ]
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# -------------------------------
-# ANALYTICS ENDPOINT
-# -------------------------------
-@app.get("/analytics")
-def get_analytics():
-
-    try:
-        db: Session = SessionLocal()
-
-        total = db.query(func.count(ResumeAnalysis.id)).scalar()
-        avg_score = db.query(func.avg(ResumeAnalysis.final_score)).scalar()
-        max_score = db.query(func.max(ResumeAnalysis.final_score)).scalar()
-        min_score = db.query(func.min(ResumeAnalysis.final_score)).scalar()
-
-        db.close()
-
-        return {
-            "total_resumes": total or 0,
-            "average_score": round(float(avg_score or 0), 2),
-            "highest_score": round(float(max_score or 0), 2),
-            "lowest_score": round(float(min_score or 0), 2)
+    return [
+        {
+            "id":               r.id,
+            "filename":         r.filename,
+            "final_score":      r.final_score,
+            "cosine_score":     r.cosine_score,
+            "skill_score":      r.skill_score,
+            "experience_score": r.experience_score,
+            "created_at":       r.created_at,
         }
+        for r in records
+    ]
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+# ---------------------------------------------------------------------------
+# Analytics  (only the logged-in user's data)
+# ---------------------------------------------------------------------------
+
+@app.get("/analytics")
+def get_analytics(
+    db:           Session = Depends(get_db),
+    current_user: dict    = Depends(get_current_user),
+):
+    user_id = current_user["sub"]
+    base_q  = db.query(ResumeAnalysis).filter(ResumeAnalysis.user_id == user_id)
+
+    total     = base_q.with_entities(func.count(ResumeAnalysis.id)).scalar()
+    avg_score = base_q.with_entities(func.avg(ResumeAnalysis.final_score)).scalar()
+    max_score = base_q.with_entities(func.max(ResumeAnalysis.final_score)).scalar()
+    min_score = base_q.with_entities(func.min(ResumeAnalysis.final_score)).scalar()
+
+    return {
+        "total_resumes":  total or 0,
+        "average_score":  round(float(avg_score or 0), 2),
+        "highest_score":  round(float(max_score or 0), 2),
+        "lowest_score":   round(float(min_score or 0), 2),
+    }
