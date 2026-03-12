@@ -4,12 +4,12 @@ import Navbar from './components/Navbar';
 import AnalyzePage from './pages/AnalyzePage';
 import HistoryPage from './pages/HistoryPage';
 import AnalyticsPage from './pages/AnalyticsPage';
-import AuthPage from './pages/AuthPage.tsx'
+import AuthPage from './pages/AuthPage';
 import { isLoggedIn, getEmail, clearToken } from './api/client';
 
 export default function App() {
-  const [loggedIn, setLoggedIn] = useState<boolean>(isLoggedIn);
-  const [userEmail, setUserEmail] = useState<string | null>(getEmail);
+  const [loggedIn, setLoggedIn] = useState<boolean>(isLoggedIn());
+  const [userEmail, setUserEmail] = useState<string | null>(getEmail());
 
   function handleAuth(email: string) {
     setUserEmail(email);
@@ -35,7 +35,6 @@ export default function App() {
             <Route path="/" element={<AnalyzePage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
-            {/* Catch-all: redirect unknown paths to home */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
