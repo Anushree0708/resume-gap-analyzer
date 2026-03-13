@@ -189,52 +189,32 @@ async def analyze(
     db: Session = Depends(get_db),
 ):
 
-    try:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File missing")
 
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="File missing")
+    pdf_bytes = await file.read()
 
-        if not file.filename.lower().endswith(".pdf"):
-            raise HTTPException(status_code=400, detail="Only PDF files allowed")
+    resume_text = extract_text_from_pdf(pdf_bytes)
 
-        pdf_bytes = await file.read()
+    print("RESUME TEXT LENGTH:", len(resume_text))
 
-        if len(pdf_bytes) == 0:
-            raise HTTPException(status_code=400, detail="Uploaded file empty")
+    result = analyze_resume(resume_text, job_description)
 
-        resume_text = extract_text_from_pdf(pdf_bytes)
+    print("ANALYSIS RESULT:", result)
 
-        if not resume_text.strip():
-            raise HTTPException(status_code=400, detail="Could not read PDF")
+    entry = ResumeAnalysis(
+        filename=file.filename,
+        job_description=job_description,
+        final_score=result.get("final_match_score", 0),
+        cosine_score=result.get("cosine_similarity_score", 0),
+        skill_score=result.get("skill_match_score", 0),
+        experience_score=result.get("experience_score", 0),
+    )
 
-        result = analyze_resume(resume_text, job_description)
+    db.add(entry)
+    db.commit()
 
-        print("ANALYSIS RESULT:", result)
-
-        entry = ResumeAnalysis(
-            filename=file.filename,
-            job_description=job_description,
-            final_score=result.get("final_match_score", 0),
-            cosine_score=result.get("cosine_similarity_score", 0),
-            skill_score=result.get("skill_match_score", 0),
-            experience_score=result.get("experience_score", 0),
-        )
-
-        db.add(entry)
-        db.commit()
-
-        return result
-
-    except Exception as e:
-
-        print("ERROR IN ANALYZE:", str(e))
-
-        raise HTTPException(
-            status_code=500,
-            detail="Error analyzing resume"
-        )
-
-
+    return result
 # ---------------------------------------------------------------------------
 # HISTORY
 # ---------------------------------------------------------------------------
