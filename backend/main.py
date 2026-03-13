@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -20,7 +19,7 @@ from backend.utils import extract_text_from_pdf
 
 
 # ---------------------------------------------------------------------------
-# App & CORS
+# App
 # ---------------------------------------------------------------------------
 
 app = FastAPI()
@@ -46,14 +45,12 @@ Base.metadata.create_all(bind=engine)
 
 
 # ---------------------------------------------------------------------------
-# JWT config
+# JWT CONFIG (kept for register/login)
 # ---------------------------------------------------------------------------
 
 JWT_SECRET = os.environ.get("JWT_SECRET", "supersecretkey-resumegap-2026")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_H = 24 * 7
-
-bearer_scheme = HTTPBearer()
 
 
 # ---------------------------------------------------------------------------
@@ -80,10 +77,11 @@ def _verify_password(plain, stored_hash, stored_salt):
 
 
 # ---------------------------------------------------------------------------
-# Token helpers
+# Token creation
 # ---------------------------------------------------------------------------
 
 def _create_token(user_id: int, email: str):
+
     payload = {
         "sub": user_id,
         "email": email,
@@ -91,25 +89,6 @@ def _create_token(user_id: int, email: str):
     }
 
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-
-def _decode_token(token: str):
-    try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-
-# ---------------------------------------------------------------------------
-# Auth dependency
-# ---------------------------------------------------------------------------
-
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
-    return _decode_token(credentials.credentials)
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +104,7 @@ def get_db():
 
 
 # ---------------------------------------------------------------------------
-# Schemas
+# Schema
 # ---------------------------------------------------------------------------
 
 class AuthRequest(BaseModel):
@@ -155,7 +134,7 @@ def register(body: AuthRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid email")
 
     if len(body.password) < 8:
-        raise HTTPException(status_code=400, detail="Password too short")
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
     existing = db.query(User).filter(User.email == email).first()
 
@@ -205,13 +184,14 @@ def login(body: AuthRequest, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# Analyze (PUBLIC ENDPOINT — NO TOKEN REQUIRED)
+# ANALYZE (PUBLIC)
 # ---------------------------------------------------------------------------
 
 @app.post("/analyze")
 async def analyze(
     file: UploadFile = File(...),
     job_description: str = Form(...),
+    db: Session = Depends(get_db),
 ):
 
     if not file.filename:
@@ -223,7 +203,7 @@ async def analyze(
     pdf_bytes = await file.read()
 
     if len(pdf_bytes) == 0:
-        raise HTTPException(status_code=400, detail="File empty")
+        raise HTTPException(status_code=400, detail="Uploaded file empty")
 
     resume_text = extract_text_from_pdf(pdf_bytes)
 
@@ -232,50 +212,64 @@ async def analyze(
 
     result = analyze_resume(resume_text, job_description)
 
+    # Save analysis
+    entry = ResumeAnalysis(
+        filename=file.filename,
+        job_description=job_description,
+        final_score=result["final_match_score"],
+        cosine_score=result["cosine_similarity_score"],
+        skill_score=result["skill_match_score"],
+        experience_score=result["experience_score"],
+    )
+
+    db.add(entry)
+    db.commit()
+
     return result
 
 
 # ---------------------------------------------------------------------------
-# History (Requires login)
+# HISTORY (PUBLIC)
 # ---------------------------------------------------------------------------
 
 @app.get("/history")
-def history(
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
+def get_history(db: Session = Depends(get_db)):
 
     records = (
         db.query(ResumeAnalysis)
-        .filter(ResumeAnalysis.user_id == current_user["sub"])
         .order_by(ResumeAnalysis.created_at.desc())
         .all()
     )
 
-    return records
+    return [
+        {
+            "id": r.id,
+            "filename": r.filename,
+            "final_score": r.final_score,
+            "cosine_score": r.cosine_score,
+            "skill_score": r.skill_score,
+            "experience_score": r.experience_score,
+            "created_at": r.created_at,
+        }
+        for r in records
+    ]
 
 
 # ---------------------------------------------------------------------------
-# Analytics (Requires login)
+# ANALYTICS (PUBLIC)
 # ---------------------------------------------------------------------------
 
 @app.get("/analytics")
-def analytics(
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
+def get_analytics(db: Session = Depends(get_db)):
 
-    user_id = current_user["sub"]
-
-    total = db.query(func.count(ResumeAnalysis.id)).filter(
-        ResumeAnalysis.user_id == user_id
-    ).scalar()
-
-    avg = db.query(func.avg(ResumeAnalysis.final_score)).filter(
-        ResumeAnalysis.user_id == user_id
-    ).scalar()
+    total = db.query(func.count(ResumeAnalysis.id)).scalar()
+    avg_score = db.query(func.avg(ResumeAnalysis.final_score)).scalar()
+    max_score = db.query(func.max(ResumeAnalysis.final_score)).scalar()
+    min_score = db.query(func.min(ResumeAnalysis.final_score)).scalar()
 
     return {
         "total_resumes": total or 0,
-        "average_score": round(float(avg or 0), 2),
+        "average_score": round(float(avg_score or 0), 2),
+        "highest_score": round(float(max_score or 0), 2),
+        "lowest_score": round(float(min_score or 0), 2),
     }
