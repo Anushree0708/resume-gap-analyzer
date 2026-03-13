@@ -19,33 +19,28 @@ from backend.utils import extract_text_from_pdf
 
 
 # ---------------------------------------------------------------------------
-# App
+# APP SETUP
 # ---------------------------------------------------------------------------
 
 app = FastAPI()
 
-origins = [
-    "http://localhost:5173",
-    "https://resume-gap-analyzer-2-i2m8.onrender.com",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # allow frontend access
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ---------------------------------------------------------------------------
-# Create tables
+# CREATE DATABASE TABLES
 # ---------------------------------------------------------------------------
 
 Base.metadata.create_all(bind=engine)
 
 
 # ---------------------------------------------------------------------------
-# JWT CONFIG (kept for register/login)
+# JWT CONFIG (for login/register only)
 # ---------------------------------------------------------------------------
 
 JWT_SECRET = os.environ.get("JWT_SECRET", "supersecretkey-resumegap-2026")
@@ -54,7 +49,7 @@ JWT_EXPIRY_H = 24 * 7
 
 
 # ---------------------------------------------------------------------------
-# Password helpers
+# PASSWORD HELPERS
 # ---------------------------------------------------------------------------
 
 def _hash_password(password: str, salt: str | None = None):
@@ -77,7 +72,7 @@ def _verify_password(plain, stored_hash, stored_salt):
 
 
 # ---------------------------------------------------------------------------
-# Token creation
+# TOKEN CREATION
 # ---------------------------------------------------------------------------
 
 def _create_token(user_id: int, email: str):
@@ -92,7 +87,7 @@ def _create_token(user_id: int, email: str):
 
 
 # ---------------------------------------------------------------------------
-# DB dependency
+# DATABASE SESSION
 # ---------------------------------------------------------------------------
 
 def get_db():
@@ -104,7 +99,7 @@ def get_db():
 
 
 # ---------------------------------------------------------------------------
-# Schema
+# REQUEST MODEL
 # ---------------------------------------------------------------------------
 
 class AuthRequest(BaseModel):
@@ -113,7 +108,7 @@ class AuthRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Root
+# ROOT ENDPOINT
 # ---------------------------------------------------------------------------
 
 @app.get("/")
@@ -122,7 +117,7 @@ def home():
 
 
 # ---------------------------------------------------------------------------
-# Register
+# REGISTER
 # ---------------------------------------------------------------------------
 
 @app.post("/register")
@@ -162,7 +157,7 @@ def register(body: AuthRequest, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# Login
+# LOGIN
 # ---------------------------------------------------------------------------
 
 @app.post("/login")
@@ -184,7 +179,7 @@ def login(body: AuthRequest, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# ANALYZE (PUBLIC)
+# ANALYZE RESUME
 # ---------------------------------------------------------------------------
 
 @app.post("/analyze")
@@ -194,42 +189,54 @@ async def analyze(
     db: Session = Depends(get_db),
 ):
 
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="File missing")
+    try:
 
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF allowed")
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="File missing")
 
-    pdf_bytes = await file.read()
+        if not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
-    if len(pdf_bytes) == 0:
-        raise HTTPException(status_code=400, detail="Uploaded file empty")
+        pdf_bytes = await file.read()
 
-    resume_text = extract_text_from_pdf(pdf_bytes)
+        if len(pdf_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file empty")
 
-    if not resume_text.strip():
-        raise HTTPException(status_code=400, detail="Could not read PDF")
+        resume_text = extract_text_from_pdf(pdf_bytes)
 
-    result = analyze_resume(resume_text, job_description)
+        if not resume_text.strip():
+            raise HTTPException(status_code=400, detail="Could not read PDF")
 
-    # Save analysis
-    entry = ResumeAnalysis(
-        filename=file.filename,
-        job_description=job_description,
-        final_score=result["final_match_score"],
-        cosine_score=result["cosine_similarity_score"],
-        skill_score=result["skill_match_score"],
-        experience_score=result["experience_score"],
-    )
+        result = analyze_resume(resume_text, job_description)
 
-    db.add(entry)
-    db.commit()
+        print("ANALYSIS RESULT:", result)
 
-    return result
+        entry = ResumeAnalysis(
+            filename=file.filename,
+            job_description=job_description,
+            final_score=result.get("final_match_score", 0),
+            cosine_score=result.get("cosine_similarity_score", 0),
+            skill_score=result.get("skill_match_score", 0),
+            experience_score=result.get("experience_score", 0),
+        )
+
+        db.add(entry)
+        db.commit()
+
+        return result
+
+    except Exception as e:
+
+        print("ERROR IN ANALYZE:", str(e))
+
+        raise HTTPException(
+            status_code=500,
+            detail="Error analyzing resume"
+        )
 
 
 # ---------------------------------------------------------------------------
-# HISTORY (PUBLIC)
+# HISTORY
 # ---------------------------------------------------------------------------
 
 @app.get("/history")
@@ -256,7 +263,7 @@ def get_history(db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# ANALYTICS (PUBLIC)
+# ANALYTICS
 # ---------------------------------------------------------------------------
 
 @app.get("/analytics")
