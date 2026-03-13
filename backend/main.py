@@ -188,33 +188,35 @@ async def analyze(
     job_description: str = Form(...),
     db: Session = Depends(get_db),
 ):
+    try:
+        print("Upload received:", file.filename)
 
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="File missing")
+        pdf_bytes = await file.read()
+        print("PDF size:", len(pdf_bytes))
 
-    pdf_bytes = await file.read()
+        resume_text = extract_text_from_pdf(pdf_bytes)
+        print("Resume text length:", len(resume_text))
 
-    resume_text = extract_text_from_pdf(pdf_bytes)
+        result = analyze_resume(resume_text, job_description)
+        print("Result:", result)
 
-    print("RESUME TEXT LENGTH:", len(resume_text))
+        entry = ResumeAnalysis(
+            filename=file.filename,
+            job_description=job_description,
+            final_score=result.get("final_match_score", 0),
+            cosine_score=result.get("cosine_similarity_score", 0),
+            skill_score=result.get("skill_match_score", 0),
+            experience_score=result.get("experience_score", 0),
+        )
 
-    result = analyze_resume(resume_text, job_description)
+        db.add(entry)
+        db.commit()
 
-    print("ANALYSIS RESULT:", result)
+        return result
 
-    entry = ResumeAnalysis(
-        filename=file.filename,
-        job_description=job_description,
-        final_score=result.get("final_match_score", 0),
-        cosine_score=result.get("cosine_similarity_score", 0),
-        skill_score=result.get("skill_match_score", 0),
-        experience_score=result.get("experience_score", 0),
-    )
-
-    db.add(entry)
-    db.commit()
-
-    return result
+    except Exception as e:
+        print("ANALYZE ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 # ---------------------------------------------------------------------------
 # HISTORY
 # ---------------------------------------------------------------------------
