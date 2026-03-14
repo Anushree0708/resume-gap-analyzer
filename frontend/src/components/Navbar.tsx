@@ -13,7 +13,7 @@ export default function Navbar() {
     <nav className="bg-indigo-700 text-white shadow-md">
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-8">
         <span className="font-bold text-lg tracking-tight">
-          📄 Resume Skill Gap Analyzer
+          📄 Resume Gap Analyzer
         </span>
         <div className="flex gap-2 ml-auto items-center">
           {links.map(({ to, label }) => (
