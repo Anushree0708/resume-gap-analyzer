@@ -1,16 +1,28 @@
+// src/pages/AnalyticsPage.tsx
+
 import { useEffect, useState } from 'react';
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { fetchAnalytics, fetchHistory } from '../api/client';
-import type { AnalyticsData, HistoryRecord } from '../types';
+
+interface HistoryRecord {
+  id:               number;
+  filename:         string;
+  final_score:      number;
+  cosine_score:     number;
+  skill_score:      number;
+  experience_score: number | null;
+  created_at:       string;
+}
+
+interface AnalyticsData {
+  total_resumes: number;
+  average_score: number;
+  highest_score: number;
+  lowest_score:  number;
+}
 
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -23,16 +35,13 @@ function StatCard({ label, value, color }: { label: string; value: string; color
 
 export default function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [history, setHistory] = useState<HistoryRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [history,   setHistory]   = useState<HistoryRecord[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([fetchAnalytics(), fetchHistory()])
-      .then(([a, h]) => {
-        setAnalytics(a);
-        setHistory(h);
-      })
+      .then(([a, h]) => { setAnalytics(a); setHistory(h); })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load analytics.'))
       .finally(() => setLoading(false));
   }, []);
@@ -41,7 +50,7 @@ export default function AnalyticsPage() {
     index: i + 1,
     score: parseFloat(r.final_score.toFixed(1)),
     label: r.filename,
-    date: new Date(r.created_at).toLocaleDateString(),
+    date:  new Date(r.created_at).toLocaleDateString(),
   }));
 
   return (
@@ -53,7 +62,7 @@ export default function AnalyticsPage() {
 
       {loading && (
         <div className="flex items-center justify-center py-20 text-gray-400">
-          <svg className="animate-spin h-6 w-6 mr-3" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <svg className="animate-spin h-6 w-6 mr-3" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
@@ -62,7 +71,7 @@ export default function AnalyticsPage() {
       )}
 
       {error && (
-        <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
           {error}
         </div>
       )}
@@ -78,9 +87,9 @@ export default function AnalyticsPage() {
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <StatCard label="Total Analyzed" value={String(analytics.total_resumes)} color="border-indigo-100" />
-                <StatCard label="Average Score" value={`${analytics.average_score}%`} color="border-blue-100" />
-                <StatCard label="Highest Score" value={`${analytics.highest_score}%`} color="border-green-100" />
-                <StatCard label="Lowest Score" value={`${analytics.lowest_score}%`} color="border-red-100" />
+                <StatCard label="Average Score"  value={`${analytics.average_score}%`}   color="border-blue-100"   />
+                <StatCard label="Highest Score"  value={`${analytics.highest_score}%`}   color="border-green-100"  />
+                <StatCard label="Lowest Score"   value={`${analytics.lowest_score}%`}    color="border-red-100"    />
               </div>
 
               {chartData.length > 0 && (

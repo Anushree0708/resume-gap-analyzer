@@ -1,6 +1,6 @@
 # migrate.py
-# Run this once to add the new columns to the existing database table.
-# Place this file in your backend/ folder.
+# Run ONCE on your database to switch from JWT-auth columns to session_id.
+# Place in your backend/ folder and run:  python migrate.py
 
 import os
 from sqlalchemy import create_engine, text
@@ -9,25 +9,20 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 
 migrations = [
-    # Add user_id column (nullable so old rows are not affected)
-    """
-    ALTER TABLE resume_analysis
-    ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
-    """,
-    # Add experience_score column
-    """
-    ALTER TABLE resume_analysis
-    ADD COLUMN IF NOT EXISTS experience_score FLOAT;
-    """,
+    "ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS session_id VARCHAR;",
+    "ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS experience_score FLOAT;",
+    # Optional cleanup — removes the old user_id foreign key & column
+    "ALTER TABLE resume_analysis DROP CONSTRAINT IF EXISTS resume_analysis_user_id_fkey;",
+    "ALTER TABLE resume_analysis DROP COLUMN IF EXISTS user_id;",
 ]
 
 with engine.connect() as conn:
     for sql in migrations:
         try:
             conn.execute(text(sql))
-            print(f"✅ Ran: {sql.strip()[:60]}")
+            print(f"✅  {sql.strip()[:80]}")
         except Exception as e:
-            print(f"⚠️  Skipped (already exists?): {e}")
+            print(f"⚠️  Skipped: {e}")
     conn.commit()
 
-print("✅ Migration complete.")
+print("\n✅ Migration complete.")

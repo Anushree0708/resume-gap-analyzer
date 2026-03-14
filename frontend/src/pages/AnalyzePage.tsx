@@ -1,9 +1,20 @@
-import { useState, useRef } from "react";
-import { analyzeResume } from "../api/client";
-import type { AnalyzeResult } from "../types";
+// src/pages/AnalyzePage.tsx
 
-const MAX_FILE_SIZE_MB = 10;
+import { useState, useRef } from 'react';
+import { analyzeResume } from '../api/client';
+
+const MAX_FILE_SIZE_MB    = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+interface AnalyzeResult {
+  final_match_score:       number;
+  cosine_similarity_score: number;
+  skill_match_score:       number;
+  experience_score:        number;
+  experience_note?:        string;
+  matched_skills:          string[];
+  missing_skills:          string[];
+}
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
@@ -22,12 +33,11 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-function SkillBadges({ skills, color }: { skills: string[]; color: "green" | "red" }) {
+function SkillBadges({ skills, color }: { skills: string[]; color: 'green' | 'red' }) {
   const cls =
-    color === "green"
-      ? "bg-green-100 text-green-800 border border-green-300"
-      : "bg-red-100 text-red-800 border border-red-300";
-
+    color === 'green'
+      ? 'bg-green-100 text-green-800 border border-green-300'
+      : 'bg-red-100 text-red-800 border border-red-300';
   return (
     <div className="flex flex-wrap gap-2 mt-2">
       {skills.length === 0 ? (
@@ -44,19 +54,18 @@ function SkillBadges({ skills, color }: { skills: string[]; color: "green" | "re
 }
 
 export default function AnalyzePage() {
-  const [file, setFile]       = useState<File | null>(null);
-  const [jd, setJd]           = useState("");
+  const [file,    setFile]    = useState<File | null>(null);
+  const [jd,      setJd]      = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
-  const [result, setResult]   = useState<AnalyzeResult | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
+  const [result,  setResult]  = useState<AnalyzeResult | null>(null);
   const fileInputRef          = useRef<HTMLInputElement>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0] ?? null;
     if (!selected) return;
-
-    if (!selected.name.toLowerCase().endsWith(".pdf")) {
-      setError("Only PDF files are supported.");
+    if (!selected.name.toLowerCase().endsWith('.pdf')) {
+      setError('Only PDF files are supported.');
       setFile(null);
       return;
     }
@@ -70,8 +79,8 @@ export default function AnalyzePage() {
   }
 
   async function handleSubmit() {
-    if (!file)       { setError("Please upload a PDF resume."); return; }
-    if (!jd.trim())  { setError("Please enter a job description."); return; }
+    if (!file)      { setError('Please upload a PDF resume.'); return; }
+    if (!jd.trim()) { setError('Please enter a job description.'); return; }
 
     setLoading(true);
     setError(null);
@@ -80,9 +89,9 @@ export default function AnalyzePage() {
     try {
       const data = await analyzeResume(file, jd.trim());
       setResult(data);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Analysis failed.");
+      setError(err instanceof Error ? err.message : 'Analysis failed.');
     } finally {
       setLoading(false);
     }
@@ -96,11 +105,8 @@ export default function AnalyzePage() {
         <p className="text-gray-500 mt-1">Upload your PDF resume and paste the job description.</p>
       </div>
 
-      {/* Results card */}
       {result && (
         <div className="bg-white rounded-2xl shadow-md border p-6 space-y-6">
-
-          {/* Overall score */}
           <div className="text-center">
             <div className="text-6xl font-extrabold text-indigo-600">
               {result.final_match_score.toFixed(1)}%
@@ -108,21 +114,18 @@ export default function AnalyzePage() {
             <div className="text-gray-500 text-sm">Overall Match Score</div>
           </div>
 
-          {/* Score breakdown bars */}
           <div className="space-y-4">
-            <ScoreBar label="Skill Match"          value={result.skill_match_score} />
-            <ScoreBar label="Cosine Similarity"    value={result.cosine_similarity_score} />
-            <ScoreBar label="Experience Match"     value={result.experience_score} />   {/* NEW */}
+            <ScoreBar label="Skill Match"       value={result.skill_match_score} />
+            <ScoreBar label="Cosine Similarity" value={result.cosine_similarity_score} />
+            <ScoreBar label="Experience Match"  value={result.experience_score} />
           </div>
 
-          {/* Experience note */}
           {result.experience_note && (
             <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-sm text-indigo-800">
               <span className="font-semibold">Experience: </span>{result.experience_note}
             </div>
           )}
 
-          {/* Skills */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <h3 className="font-semibold">✅ Matching Skills</h3>
@@ -133,13 +136,10 @@ export default function AnalyzePage() {
               <SkillBadges skills={result.missing_skills} color="red" />
             </div>
           </div>
-
         </div>
       )}
 
-      {/* Upload form */}
       <div className="bg-white rounded-2xl shadow-md border p-6 space-y-6">
-
         <input
           ref={fileInputRef}
           type="file"
@@ -149,7 +149,7 @@ export default function AnalyzePage() {
         />
 
         <div
-          className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-400"
+          className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-400 transition-colors"
           onClick={() => fileInputRef.current?.click()}
         >
           {file ? (
@@ -170,7 +170,7 @@ export default function AnalyzePage() {
           onChange={(e) => setJd(e.target.value)}
           rows={8}
           placeholder="Paste job description here..."
-          className="w-full rounded-xl border border-gray-300 px-4 py-3"
+          className="w-full rounded-xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-400"
         />
 
         {error && <div className="text-red-600 text-sm">{error}</div>}
@@ -178,11 +178,10 @@ export default function AnalyzePage() {
         <button
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-3 rounded-xl"
+          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors"
         >
-          {loading ? "Analyzing..." : "Analyze"}
+          {loading ? 'Analyzing…' : 'Analyze'}
         </button>
-
       </div>
     </div>
   );
