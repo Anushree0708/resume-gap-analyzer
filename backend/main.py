@@ -32,15 +32,19 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# Create tables & auto-migrate
+# Create tables & auto-migrate (runs after app starts, won't block boot)
 # ---------------------------------------------------------------------------
 
-Base.metadata.create_all(bind=engine)
-
-with engine.connect() as conn:
-    conn.execute(text("ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS experience_score FLOAT"))
-    conn.execute(text("ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS session_id VARCHAR"))
-    conn.commit()
+@app.on_event("startup")
+def on_startup():
+    try:
+        Base.metadata.create_all(bind=engine)
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS experience_score FLOAT"))
+            conn.execute(text("ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS session_id VARCHAR"))
+            conn.commit()
+    except Exception as e:
+        print(f"⚠️  Startup migration warning: {e}")
 
 
 # ---------------------------------------------------------------------------
