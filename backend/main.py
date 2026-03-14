@@ -1,6 +1,7 @@
 # main.py
 
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -13,10 +14,28 @@ from backend.utils import extract_text_from_pdf
 
 
 # ---------------------------------------------------------------------------
+# Lifespan — DB setup runs AFTER port is bound, so Render won't time out
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        Base.metadata.create_all(bind=engine)
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS experience_score FLOAT"))
+            conn.execute(text("ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS session_id VARCHAR"))
+            conn.commit()
+        print("✅ DB ready")
+    except Exception as e:
+        print(f"⚠️  DB startup warning (safe to ignore if columns exist): {e}")
+    yield
+
+
+# ---------------------------------------------------------------------------
 # App & CORS
 # ---------------------------------------------------------------------------
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 origins = [
     "http://localhost:5173",
@@ -30,21 +49,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ---------------------------------------------------------------------------
-# Create tables & auto-migrate (runs after app starts, won't block boot)
-# ---------------------------------------------------------------------------
-
-@app.on_event("startup")
-def on_startup():
-    try:
-        Base.metadata.create_all(bind=engine)
-        with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS experience_score FLOAT"))
-            conn.execute(text("ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS session_id VARCHAR"))
-            conn.commit()
-    except Exception as e:
-        print(f"⚠️  Startup migration warning: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +73,7 @@ def home():
 
 
 # ---------------------------------------------------------------------------
-# Analyze  — session_id sent as a form field, no login required
+# Analyze — session_id sent as a form field, no login required
 # ---------------------------------------------------------------------------
 
 @app.post("/analyze")
