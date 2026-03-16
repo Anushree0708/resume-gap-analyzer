@@ -1,9 +1,9 @@
-# main.py
-
 import os
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
+
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 
@@ -14,32 +14,46 @@ from backend.utils import extract_text_from_pdf
 
 
 # ---------------------------------------------------------------------------
-# Lifespan — DB setup runs AFTER port is bound, so Render won't time out
+# Lifespan — DB setup runs AFTER port is bound (Render friendly)
 # ---------------------------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         Base.metadata.create_all(bind=engine)
+
         with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS experience_score FLOAT"))
-            conn.execute(text("ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS session_id VARCHAR"))
+            conn.execute(text(
+                "ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS experience_score FLOAT"
+            ))
+            conn.execute(text(
+                "ALTER TABLE resume_analysis ADD COLUMN IF NOT EXISTS session_id VARCHAR"
+            ))
             conn.commit()
-        print("✅ DB ready")
+
+        print("✅ Database ready")
+
     except Exception as e:
-        print(f"⚠️  DB startup warning (safe to ignore if columns exist): {e}")
+        print(f"⚠️ DB startup warning (safe if columns already exist): {e}")
+
     yield
 
 
 # ---------------------------------------------------------------------------
-# App & CORS
+# FastAPI App
 # ---------------------------------------------------------------------------
 
 app = FastAPI(lifespan=lifespan)
 
+
+# ---------------------------------------------------------------------------
+# CORS Configuration (IMPORTANT)
+# ---------------------------------------------------------------------------
+
 origins = [
     "http://localhost:5173",
     "https://resume-gap-analyzer-2-i2m8.onrender.com",
+    "https://resume-gap-analyzer-1-li2y.onrender.com",
 ]
 
 app.add_middleware(
@@ -52,7 +66,7 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
-# DB dependency
+# Database Dependency
 # ---------------------------------------------------------------------------
 
 def get_db():
@@ -64,7 +78,7 @@ def get_db():
 
 
 # ---------------------------------------------------------------------------
-# Root
+# Root Endpoint
 # ---------------------------------------------------------------------------
 
 @app.get("/")
@@ -73,42 +87,48 @@ def home():
 
 
 # ---------------------------------------------------------------------------
-# Analyze — session_id sent as a form field, no login required
+# Analyze Resume
 # ---------------------------------------------------------------------------
 
 @app.post("/analyze")
 async def analyze(
-    file:            UploadFile = File(...),
-    job_description: str        = Form(...),
-    session_id:      str        = Form(...),
-    db:              Session    = Depends(get_db),
+    file: UploadFile = File(...),
+    job_description: str = Form(...),
+    session_id: str = Form(...),
+    db: Session = Depends(get_db),
 ):
+
     if not session_id.strip():
         raise HTTPException(status_code=400, detail="session_id is required")
+
     if not file.filename:
         raise HTTPException(status_code=400, detail="File is missing")
+
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
     pdf_bytes = await file.read()
+
     if len(pdf_bytes) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
     resume_text = extract_text_from_pdf(pdf_bytes)
+
     if not resume_text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from PDF")
 
     result = analyze_resume(resume_text, job_description)
 
     entry = ResumeAnalysis(
-        session_id       = session_id.strip(),
-        filename         = file.filename,
-        job_description  = job_description,
-        final_score      = result["final_match_score"],
-        cosine_score     = result["cosine_similarity_score"],
-        skill_score      = result["skill_match_score"],
-        experience_score = result["experience_score"],
+        session_id=session_id.strip(),
+        filename=file.filename,
+        job_description=job_description,
+        final_score=result["final_match_score"],
+        cosine_score=result["cosine_similarity_score"],
+        skill_score=result["skill_match_score"],
+        experience_score=result["experience_score"],
     )
+
     db.add(entry)
     db.commit()
 
@@ -116,14 +136,15 @@ async def analyze(
 
 
 # ---------------------------------------------------------------------------
-# History — session_id sent as HTTP header
+# Resume History
 # ---------------------------------------------------------------------------
 
 @app.get("/history")
 def get_history(
-    session_id: str     = Header(...),
-    db:         Session = Depends(get_db),
+    session_id: str = Header(...),
+    db: Session = Depends(get_db),
 ):
+
     if not session_id.strip():
         raise HTTPException(status_code=400, detail="session_id header is required")
 
@@ -136,33 +157,36 @@ def get_history(
 
     return [
         {
-            "id":               r.id,
-            "filename":         r.filename,
-            "final_score":      r.final_score,
-            "cosine_score":     r.cosine_score,
-            "skill_score":      r.skill_score,
+            "id": r.id,
+            "filename": r.filename,
+            "final_score": r.final_score,
+            "cosine_score": r.cosine_score,
+            "skill_score": r.skill_score,
             "experience_score": r.experience_score,
-            "created_at":       r.created_at,
+            "created_at": r.created_at,
         }
         for r in records
     ]
 
 
 # ---------------------------------------------------------------------------
-# Analytics — session_id sent as HTTP header
+# Analytics
 # ---------------------------------------------------------------------------
 
 @app.get("/analytics")
 def get_analytics(
-    session_id: str     = Header(...),
-    db:         Session = Depends(get_db),
+    session_id: str = Header(...),
+    db: Session = Depends(get_db),
 ):
+
     if not session_id.strip():
         raise HTTPException(status_code=400, detail="session_id header is required")
 
-    base_q = db.query(ResumeAnalysis).filter(ResumeAnalysis.session_id == session_id.strip())
+    base_q = db.query(ResumeAnalysis).filter(
+        ResumeAnalysis.session_id == session_id.strip()
+    )
 
-    total     = base_q.with_entities(func.count(ResumeAnalysis.id)).scalar()
+    total = base_q.with_entities(func.count(ResumeAnalysis.id)).scalar()
     avg_score = base_q.with_entities(func.avg(ResumeAnalysis.final_score)).scalar()
     max_score = base_q.with_entities(func.max(ResumeAnalysis.final_score)).scalar()
     min_score = base_q.with_entities(func.min(ResumeAnalysis.final_score)).scalar()
@@ -171,5 +195,5 @@ def get_analytics(
         "total_resumes": total or 0,
         "average_score": round(float(avg_score or 0), 2),
         "highest_score": round(float(max_score or 0), 2),
-        "lowest_score":  round(float(min_score or 0), 2),
+        "lowest_score": round(float(min_score or 0), 2),
     }
