@@ -120,14 +120,16 @@ async def analyze(
     result = analyze_resume(resume_text, job_description)
 
     entry = ResumeAnalysis(
-        session_id=session_id.strip(),
-        filename=file.filename,
-        job_description=job_description,
-        final_score=result["final_match_score"],
-        cosine_score=result["cosine_similarity_score"],
-        skill_score=result["skill_match_score"],
-        experience_score=result["experience_score"],
+    session_id=session_id.strip(),
+    filename=file.filename,
+    job_description=job_description,
+    final_score=float(result["final_match_score"]),
+    cosine_score=float(result["cosine_similarity_score"]),
+    skill_score=float(result["skill_match_score"]),
+    experience_score=float(result["experience_score"]),
     )
+
+
 
     db.add(entry)
     db.commit()
